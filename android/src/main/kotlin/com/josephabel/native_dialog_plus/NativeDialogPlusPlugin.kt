@@ -40,6 +40,7 @@ class NativeDialogPlusPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
                 
                 val title = call.argument<String?>("title") ?: ""
                 val message = call.argument<String>("message") ?: ""
+                val cancellable = call.argument<Boolean>("cancellable") ?: false
                 val buttons = call.argument<List<Map<String, Any>>>("actions")
                 val styleShow = call.argument<Int>("style")
 
@@ -60,7 +61,7 @@ class NativeDialogPlusPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
                         showActionSheet(title, buttonConfigs, result)
                     } else {
                         // Default Alert style
-                        showDialog(title, message, buttonConfigs, result)
+                        showDialog(title, message, cancellable, buttonConfigs, result)
                     }
                     
                 } else {
@@ -159,6 +160,7 @@ class NativeDialogPlusPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
     private fun showDialog(
         title: String,
         message: String,
+        cancellable: Boolean,
         buttons: List<NativeDialogPlusAction>,
         result: Result
     ) {
@@ -166,7 +168,7 @@ class NativeDialogPlusPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
         val builder = AlertDialog.Builder(activity ?: throw NullPointerException(), R.style.NativeDialogStyle)
             .setTitle(title)
             .setMessage(message)
-            .setCancelable(false)
+            .setCancelable(cancellable)
 
         // Add buttons to the dialog
         buttons.forEachIndexed { index, action ->

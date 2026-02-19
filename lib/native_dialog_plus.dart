@@ -64,6 +64,8 @@ class NativeDialogPlus {
   /// Main content of the dialog
   final String? message;
 
+  final bool cancellable;
+
   /// Style of the dialog, which determines if it is the native equivalent to a [CupertinoAlertDialog](https://api.flutter.dev/flutter/cupertino/CupertinoAlertDialog-class.html) or [CupertinoActionSheet](https://api.flutter.dev/flutter/cupertino/CupertinoActionSheet-class.html)
   final NativeDialogPlusStyle style;
 
@@ -78,6 +80,7 @@ class NativeDialogPlus {
   NativeDialogPlus({
     this.title,
     this.message,
+    this.cancellable = false,
     this.style = NativeDialogPlusStyle.alert,
     required this.actions,
   });
@@ -89,6 +92,7 @@ class NativeDialogPlus {
     final result = await _channel.invokeMethod<int>("showDialog", {
           "title": title,
           "message": message,
+          "cancellable": cancellable,
           "style": style.index,
           "actions": [for (var action in actions) action.toJson()]
         }) ??
