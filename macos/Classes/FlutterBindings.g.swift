@@ -1,0 +1,1 @@
+../../ios/Classes/FlutterBindings.g.swift

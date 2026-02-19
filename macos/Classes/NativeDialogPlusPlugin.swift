@@ -3,95 +3,58 @@ import FlutterMacOS
 
 public class NativeDialogPlusPlugin: NSObject, FlutterPlugin {
   public static func register(with registrar: FlutterPluginRegistrar) {
-    let channel = FlutterMethodChannel(
-      name: "native_dialog_plus", binaryMessenger: registrar.messenger)
     let instance = NativeDialogPlusPlugin()
-    registrar.addMethodCallDelegate(instance, channel: channel)
+    NativeDialogHostApiSetup.setUp(binaryMessenger: registrar.messenger, api: instance)
   }
 
-  public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-    switch call.method {
-    case "showDialog":
-      self.showDialog(call, result)
-    default:
-      result(FlutterMethodNotImplemented)
-    }
+  private func nsColor(fromARGB argb: Int64) -> NSColor {
+    let alpha = CGFloat((argb >> 24) & 0xFF) / 255.0
+    let red   = CGFloat((argb >> 16) & 0xFF) / 255.0
+    let green = CGFloat((argb >>  8) & 0xFF) / 255.0
+    let blue  = CGFloat( argb        & 0xFF) / 255.0
+    return NSColor(srgbRed: red, green: green, blue: blue, alpha: alpha)
   }
+}
 
-  private var window: NSWindow? {
-    return NSApplication.shared.windows.first
-  }
-
-  private var okText: String {
-    return NSLocalizedString("OK", comment: "OK")
-  }
-
-  private var cancelText: String {
-    return NSLocalizedString("Cancel", comment: "Cancel")
-  }
-
-  private var unavailableError: FlutterError {
-    return FlutterError(code: "UNAVAILABLE", message: "Native alert is unavailable", details: nil)
-  }
-  private var invalidStyleError: FlutterError {
-    return FlutterError(
-      code: "INVALID_STYLE", message: "Given index for style is invalid", details: nil)
-  }
-
-  private func indexToAlertStyle(_ index: Int) -> NSAlert.Style? {
-    switch index {
-    case 0:
-      return .critical
-    case 1:
-      return .informational
-    case 2:
-      return .warning
-    default:
-      return nil
-    }
-  }
-
-  private func showDialog(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
-    let args = call.arguments as! NSDictionary
-    let title = args.value(forKey: "title") as? String ?? nil
-    let message = args.value(forKey: "message") as? String ?? nil
-    let style = args.value(forKey: "style") as! Int
-
-    let alertStyle = indexToAlertStyle(style)
-    if alertStyle == nil {
-      result(invalidStyleError)
+extension NativeDialogPlusPlugin: NativeDialogHostApi {
+  func showDialog(
+    args: ShowDialogArgs,
+    completion: @escaping (Result<Int64?, Error>) -> Void
+  ) {
+    guard let window = NSApplication.shared.windows.first else {
+      completion(.failure(PigeonError(
+        code: "UNAVAILABLE",
+        message: "Native alert is unavailable",
+        details: nil
+      )))
       return
     }
+
     let alert = NSAlert()
-    alert.messageText = title ?? ""
-    alert.informativeText = message ?? ""
-    alert.alertStyle = alertStyle!
+    alert.messageText = args.title ?? ""
+    alert.informativeText = args.message ?? ""
 
-    let actions = args.value(forKey: "actions") as! [NSDictionary]
+    for (index, action) in args.actions.enumerated() {
+      alert.addButton(withTitle: action.text)
+      let button = alert.buttons[index]
+      button.isEnabled = action.enabled
 
-    for (_, action) in actions.enumerated() {
-      let title = action.value(forKey: "text") as! String
-      let enabled = action.value(forKey: "enabled") as! Bool
-      let destructive = action.value(forKey: "destructive") as! Bool
-
-      let alertButton = NSButton(title: title, target: nil, action: nil)
-      alertButton.isEnabled = enabled
       if #available(macOS 11.0, *) {
-        alertButton.hasDestructiveAction = destructive
+        button.hasDestructiveAction = action.style == .destructive
       }
 
-      alert.addButton(withTitle: title)
+      if let colorValue = action.color {
+        let color = nsColor(fromARGB: colorValue)
+        button.attributedTitle = NSAttributedString(
+          string: action.text,
+          attributes: [.foregroundColor: color]
+        )
+      }
     }
 
-    guard let window = window else {
-      result(unavailableError)
-      return
-    }
-    alert.beginSheetModal(for: window) { (response) in
-      let resultIndex =
-        Int(response.rawValue) - Int(NSApplication.ModalResponse.alertFirstButtonReturn.rawValue)
-      result(resultIndex)
+    alert.beginSheetModal(for: window) { response in
+      let index = Int(response.rawValue) - Int(NSApplication.ModalResponse.alertFirstButtonReturn.rawValue)
+      completion(.success(Int64(index)))
     }
   }
-
 }

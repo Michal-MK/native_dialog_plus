@@ -1,35 +1,42 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
 
-/// DTO for a UIAlertAction
+import 'src/platform_bindings.g.dart';
+
+/// DTO for a dialog action button.
 class NativeDialogPlusAction {
-  /// Text of the action which is displayed
+  /// Text displayed on the button.
   final String text;
 
-  /// Style of the action
+  /// Visual style of the button.
   final NativeDialogPlusActionStyle style;
 
-  /// Callback when the user clicks the action
-  /// If this callback is null, then the action is disabled
+  /// Callback invoked when the user taps the button.
+  /// If null, the button is rendered as disabled.
   final VoidCallback? onPressed;
+
+  /// Optional color for the button text. Null uses the platform default.
+  final Color? color;
 
   NativeDialogPlusAction({
     required this.text,
     this.style = NativeDialogPlusActionStyle.defaultStyle,
     this.onPressed,
+    this.color,
   });
 
-  /// Get if the action is enabled or not
   bool get enabled => onPressed != null;
 
-  Map<dynamic, dynamic> toJson() {
-    return {
-      "text": text,
-      "style": style.index,
-      "enabled": enabled,
-      "destructive": style == NativeDialogPlusActionStyle.destructive
-    };
-  }
+  DialogAction _toMessage() => DialogAction(
+        text: text,
+        style: switch (style) {
+          NativeDialogPlusActionStyle.defaultStyle => ActionStyle.defaultStyle,
+          NativeDialogPlusActionStyle.cancel => ActionStyle.cancel,
+          NativeDialogPlusActionStyle.destructive => ActionStyle.destructive,
+        },
+        enabled: enabled,
+        color: color?.toARGB32(),
+      );
 }
 
 /// Enum mapping for the [UIAlertController.Style](https://developer.apple.com/documentation/uikit/uialertcontroller/style)
@@ -40,12 +47,12 @@ enum NativeDialogPlusStyle {
 
   /// An alert displayed modally for the app.
   /// Is the native equivalent to [CupertinoAlertDialog](https://api.flutter.dev/flutter/cupertino/CupertinoAlertDialog-class.html)
-  alert
+  alert,
 }
 
 /// Enum mapping for the [UIAlertAction.Style](https://developer.apple.com/documentation/uikit/uialertaction/style)
 enum NativeDialogPlusActionStyle {
-  /// Apply the default style to the action’s action.
+  /// Apply the default style to the action's button.
   defaultStyle,
 
   /// Apply a style that indicates the action cancels the operation and leaves things unchanged.
@@ -56,7 +63,7 @@ enum NativeDialogPlusActionStyle {
 }
 
 class NativeDialogPlus {
-  static const MethodChannel _channel = MethodChannel('native_dialog_plus');
+  static final _api = NativeDialogHostApi();
 
   /// Title of the dialog
   final String? title;
@@ -85,20 +92,19 @@ class NativeDialogPlus {
     required this.actions,
   });
 
-  /// Shows the native iOS Dialog and calls the specific `onPressed` handler
-  ///
-  /// [WrongPlatformException] if `.show()` was not called on a iOS Platform
+  /// Shows the native dialog and calls the specific `onPressed` handler of the tapped action.
   Future<void> show() async {
-    final result = await _channel.invokeMethod<int>("showDialog", {
-          "title": title,
-          "message": message,
-          "cancellable": cancellable,
-          "style": style.index,
-          "actions": [for (var action in actions) action.toJson()]
-        }) ??
-        -1;
-    if (result == -1) return;
-    var action = actions[result];
+    final result = await _api.showDialog(ShowDialogArgs(
+      title: title,
+      message: message,
+      cancellable: cancellable,
+      style: style == NativeDialogPlusStyle.actionSheet
+          ? DialogStyle.actionSheet
+          : DialogStyle.alert,
+      actions: [for (final a in actions) a._toMessage()],
+    ));
+    if (result == null) return;
+    final action = actions[result];
     if (!action.enabled || action.onPressed == null) return;
     action.onPressed!();
   }
